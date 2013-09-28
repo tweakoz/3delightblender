@@ -775,12 +775,14 @@ class MATERIAL_PT_3Delight_sss(bpy.types.Panel):
         col.prop(rm, "sss_ior")
         col.prop(rm, "sss_scale")
         
-        col.prop(rm, "sss_use_reflectance")
-        sub = col.column()
-        sub.active = rm.sss_use_reflectance
-        sub.prop(rm, "sss_reflectance", text="")
+        #col.prop(rm, "sss_use_reflectance")
+        #sub = col.column()
+        #sub.active = rm.sss_use_reflectance
+        #sub.prop(rm, "sss_reflectance", text="")
         
-        col.prop(rm, "sss_meanfreepath", expand=True)
+        #col.prop(rm, "sss_meanfreepath", expand=True)
+        col.prop(rm, "sss_scattering", expand=True)
+        col.prop(rm, "sss_absorption", expand=True)
         
         col = split.column()
         col.prop(rm, "sss_shadingrate")

@@ -671,9 +671,11 @@ def export_sss_bake(file, rpass, mat):
     file.write('        Attribute "visibility" "string subsurface" "%s" \n\n' % group)
     
     file.write('        Attribute "subsurface" \n')
-    file.write('            "color meanfreepath" %s \n' % rib(rm.sss_meanfreepath))
-    if rm.sss_use_reflectance:
-        file.write('            "color reflectance" %s \n' % rib(rm.sss_reflectance))
+    file.write('            "scattering" %s \n' % rib(rm.sss_scattering))
+    file.write('            "absorption" %s \n' % rib(rm.sss_absorption))
+    #file.write('            "color meanfreepath" %s \n' % rib(rm.sss_meanfreepath))
+    #if rm.sss_use_reflectance:
+    #    file.write('            "color reflectance" %s \n' % rib(rm.sss_reflectance))
     file.write('            "refractionindex" %s \n' % rm.sss_ior)
     file.write('            "shadingrate" %s \n' % rm.sss_shadingrate)
     file.write('            "scale" %s \n' % rm.sss_scale)
