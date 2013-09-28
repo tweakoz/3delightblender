@@ -173,7 +173,7 @@ class CollectionPanel3dl():
     def _draw_collection(self, context, layout, ptr, name, operator, opcontext, prop_coll, prop_index):
         layout.label(name)
         row = layout.row()
-        row.template_list(ptr, prop_coll, ptr, prop_index, rows=1)
+        row.template_list("UI_UL_list", "3DELIGHT", ptr, prop_coll, ptr, prop_index, rows=1)
         col = row.column(align=True)
         
         op = col.operator(operator, icon="ZOOMIN", text="")
