@@ -552,6 +552,12 @@ class RendermanMaterialSettings(bpy.types.PropertyGroup):
                 precision=4,
                 default=0.5)
 
+    displacementshadingrate = FloatProperty(
+                name="trace.dispshadrate",
+                description="Traced Displacement Shading Rate",
+                precision=4,
+                default=1.0)
+
     photon_shadingmodel = EnumProperty(
                 name="Photon Shading Model",
                 description="How the object appears to photons",

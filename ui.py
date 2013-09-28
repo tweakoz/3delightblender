@@ -673,6 +673,7 @@ class MATERIAL_PT_3Delight_shader_displacement(ShaderPanel3dl, bpy.types.Panel):
         layout.separator()
         
         layout.prop(rm, "displacementbound")
+        layout.prop(rm, "displacementshadingrate")
         
         layout.separator()
         

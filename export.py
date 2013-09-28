@@ -901,6 +901,8 @@ def export_shader(file, scene, rpass, idblock, type):
         if rm.displacementbound > 0.0:
             file.write('        Attribute "displacementbound" "sphere" %f \n' % rm.displacementbound)
     
+        file.write('        Attribute "trace" "float displacementshadingrate" [ %f ] \n' % rm.displacementshadingrate)
+
         file.write('        Displacement "%s" \n' % rm.displacement_shaders.active)
         parameterlist = rna_to_shaderparameters(scene, rm, type)
     
