@@ -41,8 +41,6 @@ from .util import make_frame_path
 from .util import init_env
 from .util import get_sequence_path
 from .util import user_path
-from .util import get_path_list_converted
-from .util import path_list_convert
 
 addon_version = bl_info['version']
 
@@ -50,7 +48,6 @@ addon_version = bl_info['version']
 from .shader_parameters import exclude_lamp_params
 
 # helper functions for parameters
-from .shader_parameters import shaderparameters_from_class
 from .shader_parameters import path_win_to_unixy
 from .shader_parameters import rna_to_shaderparameters
 from .shader_parameters import get_parameters_shaderinfo
@@ -58,12 +55,10 @@ from .shader_parameters import rna_types_initialise
 
 from .shader_parameters import shader_recompile
 
-from .shader_parameters import shader_requires_shadowmap
-
+from .shader_parameters import get_path_list_converted
+from .shader_parameters import path_list_convert
 from .shader_parameters import tex_source_path
 from .shader_parameters import tex_optimised_path
-
-from .nodes import export_shader_nodetree
 
 class RPass:    
     def __init__(self, scene, objects=[], paths={}, type="", motion_blur=False):
@@ -594,69 +589,40 @@ def export_light(rpass, scene, file, ob):
     params = []
     
     file.write('    AttributeBegin\n')
-    file.write('    TransformBegin\n')
-    file.write('            Transform %s\n' % rib(m))
-    
     
     if rm.emit_photons and lamp.type in ('SPOT', 'POINT', 'SUN'):
-        file.write('        Attribute "light" "string emitphotons" [ "on" ]\n' )
-	
-	# BBM addition begin
-	# export light coshaders
-    '''
-    file.write('\n        ## Light Co-shaders\n')
-    for cosh_item in rm.coshaders.items():
-        coshader_handle = cosh_item[0]
-        coshader_name = cosh_item[1].shader_shaders.active
-        file.write('        Shader "%s" \n            "%s"\n' % (coshader_name, coshader_handle) )
-        parameterlist = rna_to_shaderparameters(scene, cosh_item[1], 'shader')
-        for sp in parameterlist:
-            if sp.is_array:
-                file.write('            "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-            else:
-                file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-	
-    file.write('\n        ## Light shader\n')
-    '''
-    # BBM addition end
-	
-    '''
+        file.write('    Attribute "light" "string emitphotons" [ "on" ]\n' )
+    
     # user defined light shader
-    if rm.nodetree == '' and rm.light_shaders.active != '':
-        file.write('        LightSource "%s" ' % rm.light_shaders.active)
-        
+    if rm.light_shaders.active != '':
+        file.write('    LightSource "%s" \n' % rm.light_shaders.active)
         params = rna_to_shaderparameters(scene, rm, 'light')
 
     # automatic shaders per blender lamp type
     elif lamp.type == 'POINT':
-        file.write('        LightSource "pointlight" \n')
+        file.write('    LightSource "pointlight" \n')
         name, params = get_parameters_shaderinfo(rpass.paths['shader'], 'pointlight', 'light')
         
     elif lamp.type == 'SPOT':
         if rm.shadow_method == 'SHADOW_MAP':
-            file.write('        LightSource "shadowspot" \n')
+            file.write('    LightSource "shadowspot" \n')
             name, params = get_parameters_shaderinfo(rpass.paths['shader'], 'shadowspot', 'light')
         
         else:
-            file.write('        LightSource "spotlight" \n')
+            file.write('    LightSource "spotlight" \n')
             name, params = get_parameters_shaderinfo(rpass.paths['shader'], 'spotlight', 'light')
             
     elif lamp.type == 'SUN':
-        file.write('        LightSource "h_distantshadow" \n')
+        file.write('    LightSource "h_distantshadow" \n')
         name, params = get_parameters_shaderinfo(rpass.paths['shader'], 'h_distantshadow', 'light')
         
     elif lamp.type == 'HEMI':
-        file.write('        LightSource "ambientlight" \n')
+        file.write('    LightSource "ambientlight" \n')
         name, params = get_parameters_shaderinfo(rpass.paths['shader'], 'ambientlight', 'light')
         
-    # file.write('            "%s" \n' % ob.name) # handle
-    '''
+    file.write('        "%s" \n' % ob.name) # handle
     
-    if rm.nodetree != '':
-        print('export nodetree ')
-        export_shader_nodetree(file, scene, lamp, output_node='OutputLightShaderNode', handle=ob.name)
-        params = []
-
+    
     # parameter list
     for sp in params:
         # special exceptions since they're not an actual properties on lamp datablock
@@ -664,24 +630,12 @@ def export_light(rpass, scene, file, ob):
             value = rib(loc)
         elif sp.name == 'to': 
             value = rib(lvec)
-
-
-        elif sp.meta == 'shadow_map_path':
-            if shader_requires_shadowmap(scene, rm, 'light'):
-                path = rib_path(shadowmap_path(scene, ob))
-                print(path)
-                file.write('        "string %s" "%s" \n' % (sp.name, path))
-
-            ''' XXX old shaders
-
-        
         elif sp.name == 'coneangle':
             if hasattr(lamp, "spot_size"):
                 coneangle = lamp.spot_size / 2.0
                 value = rib(coneangle)
             else:
                 value = rib(45)
-        
         elif sp.name in ('shadowmap', 'shadowname', 'shadowmapname'):
             if rm.shadow_method == 'SHADOW_MAP':
                 shadowmapname = rib_path(shadowmap_path(scene, ob))
@@ -690,7 +644,7 @@ def export_light(rpass, scene, file, ob):
                 file.write('        "string %s" ["raytrace"] \n' % sp.name)
             
             continue
-            '''
+        
         # more exceptions, use blender's built in equivalent parameters (eg. spot size)
         elif sp.name in exclude_lamp_params.keys():
             value = rib(getattr(lamp, exclude_lamp_params[sp.name]))
@@ -699,17 +653,11 @@ def export_light(rpass, scene, file, ob):
         else:
             value = rib(sp.value)
 
-		# BBM addition begin
-        if sp.is_array:
-            file.write('        "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-        else:
-		# BBM addition end
-            file.write('        "%s %s" %s\n' % (sp.data_type, sp.name, value))
-
-    file.write('    TransformEnd\n')
+        file.write('        "%s %s" %s\n' % (sp.data_type, sp.name, value))
+    
     file.write('    AttributeEnd\n')
     
-    file.write('    Illuminate "%s" %d \n' % (ob.name, rm.illuminates_by_default))
+    file.write('    Illuminate "%s" 1 \n' % ob.name);
     file.write('    \n')
 
 def export_sss_bake(file, rpass, mat):
@@ -736,32 +684,15 @@ def export_material(file, rpass, scene, mat):
     export_sss_bake(file, rpass, mat)
     
     export_shader_init(file, rpass, mat)
+    export_shader(file, scene, rpass, mat, 'surface')
+    export_shader(file, scene, rpass, mat, 'displacement')
+    export_shader(file, scene, rpass, mat, 'interior')
     
-    rm = mat.renderman
-
-    if rm.nodetree != '':
-        file.write('        Color %s\n' % rib(mat.diffuse_color))
-        file.write('        Opacity %s\n' % rib([mat.alpha for i in range(3)]))
-            
-        if rm.displacementbound > 0.0:
-            file.write('        Attribute "displacementbound" "sphere" %f \n' % rm.displacementbound)
-        
-        export_shader_nodetree(file, scene, mat)
-    else:
-        #export_shader(file, scene, rpass, mat, 'shader') # BBM addition
-        export_shader(file, scene, rpass, mat, 'surface')
-        export_shader(file, scene, rpass, mat, 'displacement')
-        export_shader(file, scene, rpass, mat, 'interior')
-    
-    '''
     # allow overriding with global world atmosphere shader
     if mat.renderman.inherit_world_atmosphere:
         export_shader(file, scene, rpass, scene.world, 'atmosphere')
     else:
         export_shader(file, scene, rpass, mat, 'atmosphere')
-    ''' 
-    #file.write('        Shader "brdf_specular" "brdf_specular" \n')
-    #file.write('        Shader "btdf_specular" "btdf_specular" \n')
 
 
 def export_strands(file, rpass, scene, ob, motion):
@@ -947,25 +878,11 @@ def export_shader_init(file, rpass, mat):
     if rpass.emit_photons:
         file.write('        Attribute "photon" "string shadingmodel" "%s" \n' % rm.photon_shadingmodel)
 
-def export_shader(file, scene, rpass, idblock, shader_type):
+
+def export_shader(file, scene, rpass, idblock, type):
     rm = idblock.renderman
-    file.write('\n        # %s\n' % shader_type ) # BBM addition
-	
-    parameterlist = rna_to_shaderparameters(scene, rm, shader_type)
-
-    for sp in parameterlist:
-        print('sp.meta[\'data_type\'] %s ' % sp.meta['data_type'])
-        if sp.meta['data_type'] == 'shader':
-            if sp.value == 'null':
-                continue
-            if sp.is_array:
-                collection = sp.value 
-                for item in collection:
-                    file.write('        Shader "%s" "%s"\n' % (item.value, idblock.name+'_'+sp.name) )
-            else:
-                file.write('        Shader "%s" "%s"\n' % (sp.value, sp.value)) #idblock.name+'_'+sp.name) )
-
-    if shader_type == 'surface':
+    
+    if type == 'surface':
         mat = idblock
         
         if rm.surface_shaders.active == '' or not rpass.surface_shaders: return
@@ -973,20 +890,26 @@ def export_shader(file, scene, rpass, idblock, shader_type):
         file.write('        Color %s\n' % rib(mat.diffuse_color))
         file.write('        Opacity %s\n' % rib([mat.alpha for i in range(3)]))
         file.write('        Surface "%s" \n' % rm.surface_shaders.active)
-        
-    elif shader_type == 'displacement':
+
+        parameterlist = rna_to_shaderparameters(scene, rm, type)
+
+    elif type == 'displacement':
         if rm.displacement_shaders.active == '' or not rpass.displacement_shaders: return
         
         if rm.displacementbound > 0.0:
             file.write('        Attribute "displacementbound" "sphere" %f \n' % rm.displacementbound)
+    
         file.write('        Displacement "%s" \n' % rm.displacement_shaders.active)
-            
-    elif shader_type == 'interior':
+        parameterlist = rna_to_shaderparameters(scene, rm, type)
+    
+    elif type == 'interior':
         if rm.interior_shaders.active == '' or not rpass.interior_shaders: return
         
         file.write('        Interior "%s" \n' % rm.interior_shaders.active)
+
+        parameterlist = rna_to_shaderparameters(scene, rm, type)
     
-    elif shader_type == 'atmosphere':
+    elif type == 'atmosphere':
 
         if rpass.type == 'ptc_indirect':
 
@@ -998,49 +921,16 @@ def export_shader(file, scene, rpass, idblock, shader_type):
             file.write('        Atmosphere "vol_ptcbake" \n')
             file.write('            "string ptc_file" "%s" \n' % relpath)
         
+
         if rm.atmosphere_shaders.active == '' or not rpass.atmosphere_shaders: return
+        
         file.write('        Atmosphere "%s" \n' % rm.atmosphere_shaders.active)
-    
 
-    '''
-    # BBM addition begin
-    elif shader_type == 'shader':
-        for cosh_item in rm.coshaders.items():
-            coshader_handle = cosh_item[0]
-            coshader_name = cosh_item[1].shader_shaders.active
-            file.write('        Shader "%s" "%s"\n' % (coshader_name, coshader_handle) )
-            parameterlist = rna_to_shaderparameters(scene, cosh_item[1], shader_type)
-            print('--', sp.value, sp.pyname)
-            for sp in parameterlist:
-                if sp.is_coshader and sp.value == '' or sp.value == 'null':
-                    sp.value = 'null'
-                else:
-                    if sp.is_array:
-                        file.write('            "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-                    else:
-                        file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-        return
-	# BBM addition end
-    '''
-
+        parameterlist = rna_to_shaderparameters(scene, rm, type)
+        
     # parameter list
     for sp in parameterlist:
-		# BBM addition begin
-        if sp.value == 'null':
-            continue
-
-        if sp.is_array:
-            file.write('            "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-        else:
-		# BBM addition end
-            file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-
-    # BBM removed begin
-    #if type == 'surface':
-    #    file.write('        Shader "%s" "%s" \n' % (rm.surface_shaders.active, rm.surface_shaders.active))
-    #    for sp in parameterlist:
-    #        file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-	# BBM removed end
+        file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
 
 def detect_primitive(ob):
     rm = ob.renderman
@@ -1342,30 +1232,10 @@ def export_object(file, rpass, scene, ob, motion):
 
     if rm.export_coordsys:
         file.write('        CoordinateSystem "%s" \n' % ob.name)
-    
-	# Light Linking
-    if rpass.light_shaders:
-        file.write('\n        # Light Linking\n')
-        for light in rm.light_linking:
-            light_name = light.light
-            if is_renderable(scene, scene.objects[light_name]):
-                if light.illuminate.split(' ')[-1] == 'ON':
-                    file.write('        Illuminate "%s" 1 \n' % light_name)
-                elif light.illuminate.split(' ')[-1] == 'OFF':
-                    file.write('        Illuminate "%s" 0 \n' % light_name)
 
-    # Trace Sets
-    file.write('\n        # Trace Sets\n')
-    for set in rm.trace_set:
-        set_name = set.group
-        set_mode = '+'
-        if set.mode.startswith('exclude'):
-            set_mode = '-'
-        file.write('        Attribute "grouping" "string membership" ["%s%s"] \n' % (set_mode,set_name))
-	
     # Transformation
     if ob.name in motion['transformation']:
-        file.write('\n        MotionBegin %s\n' % rib(get_ob_subframes(scene, ob)))
+        file.write('        MotionBegin %s\n' % rib(get_ob_subframes(scene, ob)))
         
         for sample in motion['transformation'][ob.name]:
             file.write('            Transform %s\n' % rib(sample))
@@ -1526,43 +1396,6 @@ def export_archive(scene, objects, filepath="", archive_motion=True, animated=Tr
     return file.name
 
 
-def export_integrator(file, rpass, scene):
-    rm = scene.world.renderman
-
-    file.write('        Shader "integrator" "inte" \n')
-
-
-    for sp in shaderparameters_from_class(rm.integrator2):
-        file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-
-    '''
-    parameterlist = rna_to_shaderparameters(scene, rm.integrator, 'surface')
-    for sp in parameterlist:
-		# BBM addition begin
-        if sp.is_array:
-            file.write('            "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-        else:
-		# BBM addition end
-            file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-    '''
-
-# BBM addition begin
-def export_world_coshaders(file, rpass, scene):
-    rm = scene.world.renderman
-
-    file.write('    ## World Co-shaders\n')
-    for cosh_item in rm.coshaders.items():
-        coshader_handle = cosh_item[0]
-        coshader_name = cosh_item[1].shader_shaders.active
-        file.write('    Shader "%s" "%s"\n' % (coshader_name, coshader_handle) )
-        parameterlist = rna_to_shaderparameters(scene, cosh_item[1], 'shader')
-        for sp in parameterlist:
-            if sp.is_array:
-                file.write('        "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-            else:
-                file.write('        "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
-				
-# BBM addition end
 
 def export_global_illumination_lights(file, rpass, scene):
     rm = scene.world.renderman
@@ -1583,12 +1416,7 @@ def export_global_illumination_lights(file, rpass, scene):
    
     # parameter list
     for sp in parameterlist:
-		# BBM addition begin
-        if sp.is_array:
-            file.write('            "%s %s[%d]" %s\n' % (sp.data_type, sp.name, len(sp.value), rib(sp.value,is_cosh_array=True)))
-        else:
-		# BBM addition end
-            file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
+        file.write('            "%s %s" %s\n' % (sp.data_type, sp.name, rib(sp.value)))
         
     file.write('    AttributeEnd\n')
     file.write('    Illuminate "indirectambient" 1 \n');
@@ -1628,27 +1456,20 @@ def render_get_resolution(r):
     return xres, yres
 
 
-def render_get_aspect(r, camera=None):
+def render_get_aspect(r):
     xres, yres = render_get_resolution(r)
     
     xratio= xres*r.pixel_aspect_x/200.0
     yratio= yres*r.pixel_aspect_y/200.0
 
-    if camera == None or camera.type != 'PERSP':
-        fit = 'AUTO'
-    else:
-        fit = camera.sensor_fit
-    
-    if fit == 'HORIZONTAL' or fit == 'AUTO' and xratio > yratio:
+    if xratio > yratio:
         aspectratio= xratio/yratio
         xaspect= aspectratio
         yaspect= 1.0
-    elif fit == 'VERTICAL' or fit == 'AUTO' and yratio > xratio:
+    else:
         aspectratio= yratio/xratio;
         xaspect= 1.0;
         yaspect= aspectratio;
-    else:
-        aspectratio = xaspect = yaspect = 1.0
         
     return xaspect, yaspect, aspectratio
 
@@ -1658,13 +1479,8 @@ def export_render_settings(file, rpass, scene):
     r = scene.render
     
     file.write('Option "render" "integer nthreads" %d\n' % rm.threads)
-    file.write('Option "trace" "integer maxdepth" [%d]\n' % rm.max_trace_depth)
-    file.write('Attribute "trace" "integer maxspeculardepth" [%d]\n' % rm.max_specular_depth)
-    file.write('Attribute "trace" "integer maxdiffusedepth" [%d]\n' % rm.max_diffuse_depth)
-    file.write('Option "limits" "integer eyesplits" %d\n' % rm.max_eye_splits)
-    file.write('Option "trace" "float approximation" %f\n' % rm.trace_approximation)
-    if rm.use_statistics:
-        file.write('Option "statistics" "endofframe" %d "filename" "/tmp/stats.txt" \n' % rm.statistics_level    )
+    file.write('Option "trace" "integer maxdepth" %d\n\n' % rm.max_trace_depth)
+    file.write('Option "limits" "integer eyesplits" %d\n\n' % rm.max_eye_splits)
     
     rpass.resolution = render_get_resolution(r)
 
@@ -1715,34 +1531,30 @@ def export_camera(file, scene, motion):
         
     r = scene.render
     ob = scene.camera    
-    cam = ob.data
+    camera = ob.data
     rm = scene.renderman
     
-    xaspect, yaspect, aspectratio = render_get_aspect(r, cam)
+    xaspect, yaspect, aspectratio = render_get_aspect(r)
     
     if rm.depth_of_field:
-        if cam.dof_object:
-            dof_distance = (ob.location - cam.dof_object.location).length
+        if camera.dof_object:
+            dof_distance = (ob.location - camera.dof_object.location).length
         else:
-            dof_distance = cam.dof_distance
+            dof_distance = camera.dof_distance
         file.write('DepthOfField %f 1.0 %f\n' % (rm.fstop, dof_distance))
         
     if scene.renderman.motion_blur:
         file.write('Shutter %f %f\n' % (rm.shutter_open, rm.shutter_close))
         file.write('Option "shutter" "efficiency" [ %f %f ] \n' % (rm.shutter_efficiency_open, rm.shutter_efficiency_close))
 
-    file.write('Clipping %f %f\n' % (cam.clip_start, cam.clip_end))
+    file.write('Clipping %f %f\n' % (camera.clip_start, camera.clip_end))
     
-    if cam.type == 'PERSP':
-        lens= cam.lens
-        
-        sensor = cam.sensor_height if cam.sensor_fit == 'VERTICAL' else cam.sensor_width
-
-        fov= 360.0*math.atan((sensor*0.5)/lens/aspectratio)/math.pi
-
+    if camera.type == 'PERSP':
+        lens= camera.lens
+        fov= 360.0*math.atan(16.0/lens/aspectratio)/math.pi
         file.write('Projection "perspective" "fov" %f\n' % fov)
     else:
-        lens= cam.ortho_scale
+        lens= camera.ortho_scale
         xaspect= xaspect*lens/(aspectratio*2.0)
         yaspect= yaspect*lens/(aspectratio*2.0)
         file.write('Projection "orthographic"\n')
@@ -1775,19 +1587,12 @@ def export_camera_shadowmap(file, scene, ob, motion):
         file.write('PixelSamples %d %d \n' % 
                     (rm.pixelsamples_x, rm.pixelsamples_y))
         file.write('PixelFilter "box" 1 1 \n')
-
+        #file.write('PixelFilter "%s" %d %d \n' % 
+        #            (rm.pixelfilter, rm.pixelfilter_x, rm.pixelfilter_y))
+    
     file.write('ShadingRate %f \n' % rm.shadingrate )
     file.write('\n') 
-    
-    if rm.light_shaders.active != '':
-        params = rna_to_shaderparameters(scene, rm, 'light')
-        for sp in params:
-            if sp.meta == 'distant_scale':
-                xaspect = yaspect = sp.value / 2.0
-                file.write('Projection "orthographic"\n')
-                file.write('ScreenWindow %f %f %f %f\n' % (-xaspect, xaspect, -yaspect, yaspect))
-                
-    '''
+  
     if lamp.type == 'SPOT':
         file.write('Clipping %f %f\n' % (lamp.shadow_buffer_clip_start, lamp.shadow_buffer_clip_end))
         file.write('Projection "perspective" "fov" %f\n' % (lamp.spot_size*(180.0/math.pi)))
@@ -1798,7 +1603,7 @@ def export_camera_shadowmap(file, scene, ob, motion):
         yaspect= lens/2.0
         file.write('Projection "orthographic"\n')    
         file.write('ScreenWindow %f %f %f %f\n' % (-xaspect, xaspect, -yaspect, yaspect))
-    '''
+    
     if scene.renderman.motion_blur:
         file.write('Shutter %f %f\n' % (srm.shutter_open, srm.shutter_close))
         file.write('Option "shutter" "efficiency" [ %f %f ] \n' % 
@@ -1827,20 +1632,14 @@ def ptc_generate_required(scene):
     if not rm.gi_secondary.ptc_generate_auto: return False
     return True
 
-def shadowmap_generate_required(scene, ob):
+def shadowmap_generate_required(ob):
     if ob.type != 'LAMP': return False
     
     rm = ob.data.renderman
-
-    if shader_requires_shadowmap(scene, rm, 'light'):
-        return True
-    
-    '''
     if not ob.data.type in ('SPOT', 'SUN'): return False
     if not rm.shadow_method == 'SHADOW_MAP': return False
     if not rm.shadow_map_generate_auto: return False
-    '''
-    return False
+    return True
 
 
 def make_ptc_indirect(paths, scene, info_callback):
@@ -1867,7 +1666,6 @@ def make_ptc_indirect(paths, scene, info_callback):
     
     export_header(file)
     export_searchpaths(file, paths)
-    export_inline_rib(file, rpass, scene)
     
     scene.frame_set(scene.frame_current)
     file.write('FrameBegin %d\n\n' % scene.frame_current)
@@ -1911,7 +1709,7 @@ def make_shadowmaps(paths, scene, info_callback):
     
     rpass = RPass(scene, render_objects, paths, "shadowmap")    
     
-    shadow_lamps = [ob for ob in rpass.objects if shadowmap_generate_required(scene, ob) ]
+    shadow_lamps = [ob for ob in rpass.objects if shadowmap_generate_required(ob) ]
     
     for ob in shadow_lamps:
         rm = ob.data.renderman
@@ -1932,9 +1730,6 @@ def make_shadowmaps(paths, scene, info_callback):
             file.write('Display "%s" "dsm" "rgbaz" \n\n' % rib_path( paths['shadow_map'], escape_slashes=True ))
         else:
             file.write('Display "%s" "shadowmap" "z" \n\n' % rib_path( paths['shadow_map'], escape_slashes=True ))
-        
-
-        export_inline_rib(file, rpass, scene, lamp=ob.data)
         
         scene.frame_set(scene.frame_current)
         file.write('FrameBegin %d\n\n' % scene.frame_current)
@@ -2041,7 +1836,7 @@ def write_preview_rib(rpass, scene):
     export_render_settings_preview(file, rpass, scene)
 
     file.write('WorldBegin\n\n')
-    
+
     # preview scene: walls, lights
     file.write('        ReadArchive "%s" \n\n' % preview_rib_data_path)
     
@@ -2091,27 +1886,7 @@ def export_hider(file, rpass, scene):
     elif rm.hider == 'raytrace':
         file.write('Hider "raytrace" \n')
         file.write('    "int progressive" [%d] \n' % rm.raytrace_progressive)
-	
-	
-def export_inline_rib(file, rpass, scene, lamp=None ):
-    rm = scene.renderman
-	
-    if lamp != None and rpass.type == 'shadowmap':
-        rm = lamp.renderman
-        txts = rm.shd_inlinerib_texts
-    elif rpass.type == 'ptc_indirect':
-        txts = rm.bak_inlinerib_texts
-    else:
-        txts = rm.bty_inlinerib_texts
 
-    file.write( '\n# Inline RIB \n' )
-
-    for txt in txts:
-        textblock = bpy.data.texts[txt.name]
-        for l in textblock.lines:
-            file.write( '%s \n' % l.body )    
-
-    file.write( '\n' )
 
 def write_rib(rpass, scene, info_callback):
     info_callback('Generating RIB')
@@ -2126,20 +1901,17 @@ def write_rib(rpass, scene, info_callback):
     
     export_display(file, rpass, scene)
     export_hider(file, rpass, scene)
-    export_inline_rib(file, rpass, scene)
     
     scene.frame_set(scene.frame_current)
     file.write('FrameBegin %d\n\n' % scene.frame_current)
     
     export_camera(file, scene, motion)
     export_render_settings(file, rpass, scene)
-    #export_global_illumination_settings(file, rpass, scene)
+    export_global_illumination_settings(file, rpass, scene)
     
     file.write('WorldBegin\n\n')
 
-    #export_global_illumination_lights(file, rpass, scene)
-    #export_world_coshaders(file, rpass, scene) # BBM addition
-    export_integrator(file, rpass, scene)
+    export_global_illumination_lights(file, rpass, scene)
     export_scene_lights(file, rpass, scene)
     export_objects(file, rpass, scene, motion)
     
@@ -2287,8 +2059,7 @@ def render_scene(engine):
         render_rib(engine)
     
 def render_preview(engine):
-    pass
-    #render_rib(engine)
+    render_rib(engine)
 
 
 def render_rib(engine):
@@ -2301,7 +2072,7 @@ def render_rib(engine):
     
     render_output = engine.rpass.paths['render_output']
     
-#XXX    engine.rpass.options.append('-q')
+    engine.rpass.options.append('-q')
     #engine.rpass.options.append('-Progress')
     
     cmd = [engine.rpass.paths['rman_binary']] + engine.rpass.options + [engine.rpass.paths['rib_output']]

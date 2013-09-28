@@ -45,60 +45,6 @@ from .export import export_archive
 from bpy_extras.io_utils import ExportHelper
 
 
-class SHADING_OT_add_renderman_nodetree(bpy.types.Operator):
-    ''''''
-    bl_idname = "shading.add_renderman_nodetree"
-    bl_label = "Add Renderman Nodetree"
-    bl_description = "Add a renderman shader node tree linked to this material"
-
-    idtype = StringProperty(name="ID Type", default="material")
-
-    def execute(self, context):
-        idtype = self.properties.idtype
-        context_data = {'material':context.material, 'lamp':context.lamp }
-        idblock = context_data[idtype]
-        
-        nt = bpy.data.node_groups.new(idblock.name, type='RendermanShaderTree')
-        nt.use_fake_user = True
-        idblock.renderman.nodetree = nt.name
-
-        if idtype == 'material':
-            nt.nodes.new('OutputShaderNode')
-        else:
-            nt.nodes.new('OutputLightShaderNode')
-
-        return {'FINISHED'}
-
-class SHADING_OT_init_parameters(bpy.types.Operator):
-    bl_idname = "shading.init_parameters"
-    bl_label = "Init Parameters"
-    bl_description = "Generate the Shader's parameters after changes"
-
-    shader_name = StringProperty(name="Shader Name")
-    attribute = StringProperty(name="Attribute to assign shader parameters to")
-    id_type = StringProperty(name="Type of ID data")
-
-    def execute(self, context):
-        shader_name = self.properties.shader_name
-        attribute = self.properties.attribute
-        id_type = self.properties.id_type
-        scene = context.scene
-
-        from .shader_parameters import shader_class
-
-        if id_type == 'WORLD':
-            shd_class = shader_class(scene, shader_name)
-            
-            rm = context.world.renderman
-            rmtype = type(rm)
-            from .properties import RendermanWorldSettings
-
-            rmtype.integrator2 = PointerProperty(type=shd_class, name="Shader Params")
-
-        return {'FINISHED'}
-
-
-
 
 class SHADING_OT_refresh_shader_parameters(bpy.types.Operator):
     ''''''
@@ -129,43 +75,9 @@ class SHADING_OT_refresh_shader_parameters(bpy.types.Operator):
             ptr = context.lamp.renderman
         elif shader_type == 'atmosphere':
             ptr = context.world.renderman
-		
-        rna_type_initialise(scene, rm, shader_type, True)
-		
-		# I should really be updating the single parameter rather than the whole param list!!!
+
         rna_type_initialise(scene, ptr, shader_type, True)
         return {'FINISHED'}
-
-# BBM addition begin
-class SHADING_OT_refresh_coshader_list(bpy.types.Operator):
-    ''''''
-    bl_idname = "shading.refresh_coshader_list"
-    bl_label = "Refresh Coshader List"
-    bl_description = "Re-generates the available coshaders list"
-
-    shader_type = StringProperty(name="Shader Type",
-        description="Type of current coshader",
-        default="")
-
-    parameter_name = StringProperty(name="Param Name",
-        description="Name of coshader param to be updated",
-        default="")
-	
-    def execute(self, context):
-        shader_type = self.properties.shader_type
-        param_name = self.properties.parameter_name
-        #is_world_coshader = self.properties.is_world_coshader
-        scene = context.scene
-        if bpy.context.active_object.name in bpy.data.lamps.keys(): # lamp
-            lamp = bpy.data.lamps.get(bpy.context.active_object.name)
-            rm = lamp.renderman
-        else: # material
-            rm = bpy.context.active_object.active_material.renderman
-        print('----- refresh coshader list START')
-        rna_type_initialise(scene, rm, shader_type, True)
-        print('----- refresh coshader list END')
-        return {'FINISHED'}
-# BBM addition end
 
 class ExportRIBArchive(bpy.types.Operator, ExportHelper):
     ''''''
@@ -298,10 +210,6 @@ class TEXTURE_OT_convert_to_texture(bpy.types.Operator):
                 ptr = context.world.renderman
             elif shader_type == 'light':
                 ptr = context.world.renderman.gi_primary
-			# BBM addition begin
-            elif shader_type == 'shader':
-                ptr = context.world.renderman
-			# BBM addition end
         
         init_env(scene)
         sptr = get_shader_pointerproperty(ptr, shader_type)
@@ -379,37 +287,7 @@ class SCREEN_OT_blocking_render(bpy.types.Operator):
     def execute(self, context):
         bpy.ops.render.render(animation=self.properties.animation)
         return {'FINISHED'}
-
-'''
-class TEXT_OT_add_inline_rib(bpy.types.Operator):
-    """
-    This operator is only intended for when there are no
-    blender text datablocks in the file. Just for convenience
-    """
-    bl_label = "Add New"
-    bl_idname = "text.add_inline_rib"
-
-    context = StringProperty(
-                name="Context",
-                description="Name of context member to find renderman pointer in",
-                default="")
-    collection = StringProperty(
-                name="Collection",
-                description="The collection to manipulate",
-                default="")
-
-    def execute(self, context):
-        if len(bpy.data.texts) > 0:
-            return {'CANCELLED'}
-        bpy.data.texts.new(name="Inline RIB")
-
-        id = getattr_recursive(context, self.properties.context)
-        rm = id.renderman
-        collection = getattr(rm, prop_coll)
-'''
-
-
-
+        
 # ### Yuck, this should be built in to blender...
 class COLLECTION_OT_add_remove(bpy.types.Operator):
     bl_label = "Add or Remove Paths"
@@ -429,7 +307,7 @@ class COLLECTION_OT_add_remove(bpy.types.Operator):
                 name="Collection",
                 description="The collection to manipulate",
                 default="")
-    collection_index = StringProperty(
+    prop_index = StringProperty(
                 name="Index Property",
                 description="The property used as a collection index",
                 default="")
@@ -437,49 +315,28 @@ class COLLECTION_OT_add_remove(bpy.types.Operator):
                 name="Default Name",
                 description="Default name to give this collection item",
                 default="")
-	# BBM addition begin
-    is_shader_param = BoolProperty(name='Is shader parameter', default=False)
-    shader_type = StringProperty(
-                name="shader type",
-                default='surface')
-	# BBM addition end
 
     def invoke(self, context, event):
         scene = context.scene
-		# BBM modification
-        if not self.properties.is_shader_param:
-            id = getattr_recursive(context, self.properties.context)
-            rm = id.renderman
-        else:
-            if context.active_object.name in bpy.data.lamps.keys():
-                rm = bpy.data.lamps[context.active_object.name].renderman
-            else:
-                rm = context.active_object.active_material.renderman
-            id = getattr( rm, '%s_shaders' % self.properties.shader_type )
-            rm = getattr(id, self.properties.context)
+        id = getattr_recursive(context, self.properties.context)
+        rm = id.renderman
         
         prop_coll = self.properties.collection
-        coll_idx = self.properties.collection_index
+        prop_idx = self.properties.prop_index
         
         collection = getattr(rm, prop_coll)
-        index = getattr(rm, coll_idx)
+        index = getattr(rm, prop_idx)
 
         # otherwise just add an empty one        
         if self.properties.action == 'ADD':
             collection.add()
             
             index += 1
-            setattr(rm, coll_idx, index)
+            setattr(rm, prop_idx, index)
             collection[-1].name = self.properties.defaultname
-			# BBM addition begin
-			# if coshader array, add the selected coshader
-            if self.is_shader_param:
-                coshader_name = getattr( rm, 'bl_hidden_%s_menu' % prop_coll )
-                collection[-1].name = coshader_name
-			# BBM addition end
         elif self.properties.action == 'REMOVE':
             collection.remove(index)
-            setattr(rm, coll_idx, index-1)
+            setattr(rm, prop_idx, index-1)
             
         return {'FINISHED'}
 

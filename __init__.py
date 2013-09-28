@@ -26,51 +26,38 @@
 bl_info = {
     "name": "3Delight",
     "author": "Matt Ebb",
-    "version": (1, 8, 0),
-    "blender": (2, 6, 6),
+    "version": (0, 7, 6),
+    "blender": (2, 6, 3),
     "location": "Info Header (engine dropdown)",
     "description": "3Delight (renderman) integration",
     "warning": "",
     "wiki_url": "http://mattebb.com/3delightblender/",
-    "tracker_url": "https://github.com/mattebb/3delightblender",
+    "tracker_url": "http://mattebb.com/3delightblender/",
     "category": "Render"}
 
 if "bpy" in locals():
     import imp
-    imp.reload(preferences)
     imp.reload(properties)
     imp.reload(ui)
     imp.reload(operators)
     imp.reload(export)
-    imp.reload(nodes)
-
-    #imp.reload(draw)
 else:
     import bpy
-    from . import ui
-    from . import preferences
     from . import properties
-    
+    from . import ui
     from . import operators
     from . import export
-    from . import nodes
-    #from . import draw
-
 
 class Render3Delight(bpy.types.RenderEngine):
     bl_idname = '3DELIGHT_RENDER'
     bl_label = "3Delight"
     bl_use_preview = True
     
-    draw_callbacks = {}
-
     def __init__(self):
         export.init(self)
         
-        
     def __del__(self):
         export.free(self)
-        
 
     # main scene render
     def update(self, data, scene):
@@ -94,22 +81,17 @@ class Render3Delight(bpy.types.RenderEngine):
 
 
 def register():
-    preferences.register()
     properties.register()
     operators.register()
     export.register()
-    #draw.register()
     bpy.utils.register_module(__name__)
-    nodes.init()
 
 
 def unregister():
-    preferences.unregister()
     properties.unregister()
     ui.unregister()
     operators.unregister()
     export.unregister()
-    #draw.unregister()
     bpy.utils.unregister_module(__name__)
 
 if __name__ == "__main__":

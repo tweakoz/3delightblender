@@ -24,12 +24,10 @@
 # ##### END MIT LICENSE BLOCK #####
 
 import bpy
-#from .properties_shader import RendermanCoshader, coshaderShaders
 
 from .util import guess_3dl_path
 
-from .shader_scan import shaders_in_path
-
+from .shader_parameters import shaders_in_path
 from .shader_parameters import rna_type_initialise
 
 from bpy.props import PointerProperty, StringProperty, BoolProperty, EnumProperty, \
@@ -38,55 +36,27 @@ IntProperty, FloatProperty, FloatVectorProperty, CollectionProperty
 # Shader parameters storage
 # --------------------------
 
-def shader_list_items(self, context, shader_type):
+def shader_list_items(self, context, type):
     defaults = [('null', 'None', ''), ('custom', 'Custom', '')]
-    return defaults + [ (s, s, '') for s in shaders_in_path(context.scene, context.material, shader_type=shader_type)]
+    return defaults + [ (s, s, '') for s in shaders_in_path(context, type)]
     
-def shader_list_update(self, context, shader_type):
+def shader_list_update(self, context, type):
     # don't overwrite active when set to custom
     if self.shader_list != "custom":
         # For safety, we keep the active shader property separate as a string property,
         # and update when chosen from the shader list
         self.active = str(self.shader_list)
-
-def shader_active_update(self, context, shader_type, location="material"):
+        
+def shader_active_update(self, context, type):
     # Also initialise shader parameters when chosen from the shader list
-    if location == 'world':
-        rm = context.world.renderman
-    elif location == 'lamp':
-        rm = context.lamp.renderman
-    else:
-        rm = context.material.renderman
-
-
-    rna_type_initialise(context.scene, rm, shader_type, True)
-    # and for coshaders
-    for coshader in rm.coshaders:        
-        rna_type_initialise(context.scene, coshader, shader_type, True)
-        # BBM
-
+    rna_type_initialise(context.scene, context.material.renderman, type, True)
 
 
 class atmosphereShaders(bpy.types.PropertyGroup):
-    def atmosphere_shader_active_update(self, context):
-        shader_active_update(self, context, 'atmosphere')
-        
     active = StringProperty(
                 name="Active Atmosphere Shader",
                 description="Shader name to use for atmosphere",
                 default="")
-    
-    def atmosphere_shader_list_items(self, context):
-        return shader_list_items(self, context, 'atmosphere')
-    
-    def atmosphere_shader_list_update(self, context):
-        shader_list_update(self, context, 'atmosphere')
-
-    shader_list = EnumProperty(
-                name="Active atmosphere Shader",
-                description="Shader name to use for surface",
-                update=atmosphere_shader_list_update,
-                items=atmosphere_shader_list_items)
     
 class displacementShaders(bpy.types.PropertyGroup):
 
@@ -159,31 +129,11 @@ class interiorShaders(bpy.types.PropertyGroup):
                 update=interior_shader_list_update,
                 items=interior_shader_list_items)
 
-#BBM modification begin
-
 class lightShaders(bpy.types.PropertyGroup):
-	
-    def light_shader_active_update(self, context):
-        shader_active_update(self, context, 'light')
-	
     active = StringProperty(
                 name="Active Light Shader",
                 description="Shader name to use for light",
                 default="")
-	
-    def light_shader_list_items(self, context):
-        return shader_list_items(self, context, 'light')
-
-    def light_shader_list_update(self, context):
-        shader_list_update(self, context, 'light')
-
-    shader_list = EnumProperty(
-                name="Active Light",
-                description="Light shader",
-                update=light_shader_list_update,
-                items=light_shader_list_items
-                )
-
 
 # Blender data
 # --------------------------
@@ -202,58 +152,6 @@ class RendermanPath(bpy.types.PropertyGroup):
     name = StringProperty(
                 name="", subtype='DIR_PATH')
 
-class RendermanInlineRIB(bpy.types.PropertyGroup):
-    name = StringProperty( name="Text Block" )
-    
-class RendermanGrouping(bpy.types.PropertyGroup):
-    name = StringProperty( name="Group Name" )
-
-class LightLinking(bpy.types.PropertyGroup):
-    
-    def lights_list_items(self, context):
-        items = [('No light chosen','Choose a light','')]
-        for lamp in bpy.data.lamps:
-            items.append( (lamp.name,lamp.name,'') )
-        return items
-    
-    def update_name( self, context ):
-        infostr = ('(Default)', '(Forced On)', '(Forced Off)')
-        valstr = ('DEFAULT', 'ON', 'OFF')
-        
-        self.name = "%s %s" % (self.light, infostr[valstr.index(self.illuminate)])
-    
-    light = StringProperty(
-                name="Light",
-                update=update_name )
-
-    illuminate = EnumProperty(
-                name="Illuminate",
-                update=update_name,
-                items=[ ('DEFAULT', 'Default', ''),
-				        ('ON', 'On', ''),
-				        ('OFF', 'Off', '')] )
-
-
-class TraceSet(bpy.types.PropertyGroup):
-    
-    def groups_list_items(self, context):
-        items = [('No group chosen','Choose a trace set','')]
-        for grp in context.scene.renderman.grouping_membership:
-            items.append( (grp.name,grp.name,'') )
-        return items
-    
-    def update_name( self, context ):
-        self.name = self.mode +' '+ self.group
-    
-    group = EnumProperty    (   name="Group", 
-                                update=update_name,
-                                items=groups_list_items
-                            )
-    mode = EnumProperty(  name="Include/Exclude",
-                                update=update_name,
-	                            items=[ ('included in', 'Include', ''),
-								        ('excluded from', 'Exclude', '')]
-                             )
 
 # hmmm, re-evaluate this idea later...
 class RendermanPass(bpy.types.PropertyGroup):
@@ -270,6 +168,33 @@ class RendermanPass(bpy.types.PropertyGroup):
     displacement_shaders  = BoolProperty(name="Displacement Shaders", description="Render displacement shaders")
     atmosphere_shaders    = BoolProperty(name="Atmosphere Shaders", description="Render atmosphere shaders")
     light_shaders         = BoolProperty(name="Light Shaders", description="Render light shaders")
+
+
+class RendermanEnvVarSettings(bpy.types.PropertyGroup):
+    
+    out = StringProperty(
+                name="OUT (Output Root)",
+                description="Default RIB export path root",
+                subtype='DIR_PATH',
+                default='//renderman-{blend}')
+    
+    shd = StringProperty(
+                name="SHD (Shadow Maps)",
+                description="SHD environment variable",
+                subtype='DIR_PATH',
+                default='$OUT/shadowmaps')
+    
+    ptc = StringProperty(
+                name="PTC (Point Clouds)",
+                description="PTC environment variable",
+                subtype='DIR_PATH',
+                default='$OUT/pointclouds')
+
+    arc = StringProperty(
+                name="ARC (Archives)",
+                description="ARC environment variable",
+                subtype='DIR_PATH',
+                default='$OUT/archives')
 
 
 
@@ -348,31 +273,11 @@ class RendermanSceneSettings(bpy.types.PropertyGroup):
     max_trace_depth = IntProperty(
                 name="Max Trace Depth",
                 description="Maximum number of ray bounces (0 disables ray tracing)",
-                min=0, max=32, default=4)
-    max_specular_depth = IntProperty(
-                name="Max Specular Depth",
-                description="Maximum number of specular ray bounces",
-                min=0, max=32, default=2)
-    max_diffuse_depth = IntProperty(
-                name="Max Diffuse Depth",
-                description="Maximum number of diffuse ray bounces",
                 min=0, max=32, default=2)
     max_eye_splits = IntProperty(
                 name="Max Eye Splits",
                 description="Maximum number of times a primitive crossing the eye plane is split before being discarded",
                 min=0, max=32, default=6)
-    trace_approximation = FloatProperty(
-                name="Raytrace Approximation",
-                description="Threshold for using approximated geometry during ray tracing. Higher values use more approximated geometry.",
-                min=0.0, max=1024.0, default=10.0)
-    use_statistics = BoolProperty(
-                name="Statistics",
-                description="Print statistics to /tmp/stats.txt after render",
-                default=False)
-    statistics_level = IntProperty(
-                name="Statistics Level",
-                description="Verbosity level of output statistics",
-                min=0, max=3, default=1)
 
     recompile_shaders = BoolProperty(
                 name="Recompile Shaders",
@@ -471,21 +376,11 @@ class RendermanSceneSettings(bpy.types.PropertyGroup):
                 name="Progressive Rendering",
                 description="Enables progressive rendering. This is only visible with some display drivers (such as idisplay)",
                 default=False)
-	
-    # Rib Box Properties
-    bty_inlinerib_texts = CollectionProperty(type=RendermanInlineRIB, name="Beauty-pass Inline RIB")
-    bty_inlinerib_index = IntProperty(min=-1, default=-1)
-	
-	
-    bak_inlinerib_texts = CollectionProperty(type=RendermanInlineRIB, name="Bake-pass Inline RIB")
-    bak_inlinerib_index = IntProperty(min=-1, default=-1)
-    
-	
-	# Trace Sets (grouping membership)
-    grouping_membership = CollectionProperty(type=RendermanGrouping, name="Trace Sets")
-    grouping_membership_index = IntProperty(min=-1, default=-1)
                 
                 
+    env_vars = PointerProperty(
+                type=RendermanEnvVarSettings,
+                name="Environment Variable Settings")
     
     shader_paths = CollectionProperty(type=RendermanPath, name="Shader Paths")
     shader_paths_index = IntProperty(min=-1, default=-1)
@@ -501,9 +396,9 @@ class RendermanSceneSettings(bpy.types.PropertyGroup):
 
 
     use_default_paths = BoolProperty(
-                name="Use 3Delight default paths",
+                name="Use default paths",
                 description="Includes paths for default shaders etc. from 3Delight install",
-                default=False)
+                default=True)
     use_builtin_paths = BoolProperty(
                 name="Use built in paths",
                 description="Includes paths for default shaders etc. from Blender->3Delight exporter",
@@ -570,13 +465,6 @@ class GISecondaryShaders(bpy.types.PropertyGroup):
                 items=gi_secondary_types,
                 default=gi_secondary_types[1][0])
 
-class IntegratorShaders(bpy.types.PropertyGroup):
-    active = EnumProperty(
-                name="Integrator",
-                description="Integrator to use for light calculation",
-                items=[('integrator', 'Ray Tracing Integrator', '')],
-                default='integrator')
-
 
 class RendermanGIPrimary(bpy.types.PropertyGroup):
 
@@ -587,12 +475,6 @@ class RendermanGISecondary(bpy.types.PropertyGroup):
     
     light_shaders = PointerProperty(
                 type=GISecondaryShaders, name="Secondary GI Shader Settings")
-
-class RendermanIntegrator(bpy.types.PropertyGroup):
-    
-    surface_shaders = PointerProperty(
-                type=IntegratorShaders, name="Integrator Shader Settings")
-
 
 # Photon Secondary bounce (render) properties
     photon_count = IntProperty(
@@ -643,20 +525,10 @@ class RendermanWorldSettings(bpy.types.PropertyGroup):
     gi_secondary = PointerProperty(
                 type=RendermanGISecondary, name="Secondary GI Settings")
 
-    integrator = PointerProperty(
-                type=RendermanIntegrator, name="Integrator Settings")
-	
-    # BBM addition begin
-    #coshaders = CollectionProperty(type=RendermanCoshader, name="World Co-Shaders")
-    #coshaders_index = IntProperty(min=-1, default=-1)
-	# BBM addition end
 
 class RendermanMaterialSettings(bpy.types.PropertyGroup):
-    
-    nodetree = StringProperty(
-                name="Node Tree",
-                description="Name of the shader node tree for this material",
-                default="")
+    pass
+
 
     surface_shaders = PointerProperty( 
                 type=surfaceShaders,
@@ -673,10 +545,6 @@ class RendermanMaterialSettings(bpy.types.PropertyGroup):
     atmosphere_shaders = PointerProperty(
                 type=atmosphereShaders,
                 name="Atmosphere Shader Settings")
-	
-    #coshaders = CollectionProperty(type=RendermanCoshader, name="Material Co-Shaders")
-    #coshaders_index = IntProperty(min=-1, default=-1)
-	
 
     displacementbound = FloatProperty(
                 name="Displacement Bound",
@@ -917,11 +785,6 @@ class RendermanTextureSettings(bpy.types.PropertyGroup):
 
 class RendermanLightSettings(bpy.types.PropertyGroup):
 
-    nodetree = StringProperty(
-                name="Node Tree",
-                description="Name of the shader node tree for this light",
-                default="")
-
     light_shaders = PointerProperty(
                 type=lightShaders,
                 name="Light Shader Settings")
@@ -979,22 +842,6 @@ class RendermanLightSettings(bpy.types.PropertyGroup):
                 name="Ortho Scale",
                 description="Scale factor for orthographic shadow maps",
                 default=1.0)
-				
-    # Rib Box Properties
-    shd_inlinerib_texts = CollectionProperty(type=RendermanInlineRIB, name='Shadow map pass Inline RIB')
-    shd_inlinerib_index = IntProperty(min=-1, default=-1)
-	
-	# illuminate
-    illuminates_by_default = BoolProperty(
-                name="Illuminates by default",
-                description="Illuminates by default",
-                default=True)
-
-    
-	# BBM addition begin
-    #coshaders = CollectionProperty(type=RendermanCoshader, name="Light Co-Shaders")
-    #coshaders_index = IntProperty(min=-1, default=-1)
-	# BBM addition end
 
 
 class RendermanMeshPrimVar(bpy.types.PropertyGroup):
@@ -1363,14 +1210,6 @@ class RendermanObjectSettings(bpy.types.PropertyGroup):
                 description="How the object appears to transmission-like rays",
                 items=transmission_items,
                 default=transmission_default)
-	
-	# Light-Linking
-    light_linking = CollectionProperty(type=LightLinking, name='Light Linking')
-    light_linking_index = IntProperty(min=-1, default=-1)
-    
-    # Trace Sets
-    trace_set = CollectionProperty(type=TraceSet, name='Trace Set')
-    trace_set_index = IntProperty(min=-1, default=-1)
 
 # collection of property group classes that need to be registered on module startup
 classes = [atmosphereShaders,
@@ -1379,17 +1218,11 @@ classes = [atmosphereShaders,
             interiorShaders,
             lightShaders,
             RendermanPath,
-			RendermanInlineRIB,
-            RendermanGrouping,
-			LightLinking,
-            TraceSet,
             RendermanPass,
             RendermanMeshPrimVar,
             RendermanParticlePrimVar,
             GIPrimaryShaders,
             GISecondaryShaders,
-            IntegratorShaders,
-            RendermanIntegrator,
             RendermanGIPrimary,
             RendermanGISecondary,
             RendermanMaterialSettings,
@@ -1397,7 +1230,7 @@ classes = [atmosphereShaders,
             RendermanTextureSettings,
             RendermanLightSettings,
             RendermanParticleSettings,
-            
+            RendermanEnvVarSettings,
             RendermanSceneSettings,
             RendermanWorldSettings,
             RendermanMeshGeometrySettings,
